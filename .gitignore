@@ -1,0 +1,16 @@
+
+/build
+/tmp
+/rook
+/certs
+/local_conf/
+
+*.pem
+*.key
+*.crt
+*.ca
+*.pfx
+*.p12
+*.envrc
+
+.DS_Store

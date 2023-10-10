@@ -1,0 +1,36 @@
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: kube-to-opnsense-bgp
+  namespace: metallb-system
+spec:
+  myASN: 64500
+  peerASN: 65551
+  peerAddress: 10.0.11.1
+---
+apiVersion: metallb.io/v1beta1
+kind: BFDProfile
+metadata:
+  name: hme-bfd-profile
+  namespace: metallb-system
+spec:
+  receiveInterval: 380
+  transmitInterval: 270
+---
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: hme-kube-pool
+  namespace: metallb-system
+spec:
+  addresses:
+  - 10.0.2.2-10.0.2.255
+    #---
+#apiVersion: metallb.io/v1beta1
+  #kind: BGPAdvertisement
+  #metadata:
+  #name: bgp-opnsense
+    #namespace: metallb-system
+    #spec:
+  #ipAddressPools:
+    #  - first-pool

@@ -1,0 +1,180 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: hme
+  name: media
+  labels:
+    app: media
+spec:
+  ports:
+    - port: 8096
+      name: jellyfin
+    - port: 8111
+      name: shoko
+  selector:
+    app: media
+    tier: frontend
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: hme
+  name: jf-pv-claim
+  labels:
+    app: media
+spec:
+  storageClassName: rook-ceph-block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: hme
+  name: shoko-pv-claim
+  labels:
+    app: media
+spec:
+  storageClassName: rook-ceph-block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: media
+  namespace: hme
+  labels:
+    app: media
+    tier: frontend
+spec:
+  selector:
+    matchLabels:
+      app: media
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: media
+        tier: frontend
+    spec:
+      containers:
+        - image: lscr.io/linuxserver/jellyfin
+          name: jellyfin
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: America/Chicago
+          ports:
+            - containerPort: 8096
+              name: jellyfin
+          volumeMounts:
+            - name: jellyfin-persistent-storage
+              mountPath: /var/www/html
+        - image: shokoanime/server
+          name: shoko
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+            - name: TZ
+              value: America/Chicago
+          ports:
+            - containerPort: 8111
+              name: shoko
+          volumeMounts:
+            - name: shoko-persistent-storage
+              mountPath: /var/www/html
+      volumes:
+        - name: shoko-persistent-storage
+          persistentVolumeClaim:
+            claimName: shoko-pv-claim
+        - name: jellyfin-persistent-storage
+          persistentVolumeClaim:
+            claimName: jf-pv-claim
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: media
+  namespace: hme
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`jellyfin.yawmzero.io`)
+    kind: Rule
+    services:
+    - name: media
+      port: 8096
+  - match: Host(`shoko.yawmzero.io`)
+    kind: Rule
+    services:
+    - name: media
+      port: 8111
+  - match: Host(`sonarr.yawmzero.io`)
+    kind: Rule
+    services:
+    - name: media
+      port: 8999
+  - match: Host(`radarr.yawmzero.io`)
+    kind: Rule
+    services:
+    - name: media
+      port: 8998
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: '30'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '1800'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '1800'
+  labels:
+    app: media
+  name: media
+  namespace: hme
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: jellyfin.yawmzero.io
+      http:
+        paths:
+          - backend:
+              service:
+                name: media
+                port:
+                  number: 8096
+            path: /
+            pathType: ImplementationSpecific
+    - host: shoko.yawmzero.io
+      http:
+        paths:
+          - backend:
+              service:
+                name: media
+                port:
+                  number: 8111
+            path: /
+            pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - jellyfin.yawmzero.io
+        - shoko.yawmzero.io
+      secretName: tls-traefik
+status:
+  loadBalancer: {}
