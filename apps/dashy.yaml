@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: hme
+  name: dashy
+  labels:
+    app: dashy
+spec:
+  ports:
+    - port: 80
+      name: dashy
+  selector:
+    app: dashy
+    tier: frontend
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashy
+  namespace: hme
+  labels:
+    app: dashy
+    tier: frontend
+spec:
+  selector:
+    matchLabels:
+      app: dashy
+      tier: frontend
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: dashy
+        tier: frontend
+    spec:
+      containers:
+        - image: lissy93/dashy
+          name: dashy
+          env:
+            - name: TZ
+              value: America/Chicago
+            - name: NODE_ENV
+              value: production
+          ports:
+            - containerPort: 80
+              name: dashy
+          volumeMounts:
+            - name: dashy-persistent-storage
+              mountPath: /app/public
+
+      volumes:
+        - name: dashy-persistent-storage
+          secret:
+            secretName: dashy
+            items:
+              - key: config
+                path: conf.yml
+            # readOnly: false
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: dashy
+  namespace: hme
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`dashy.yawmzero.io`)
+    kind: Rule
+    services:
+    - name: dashy
+      port: 80

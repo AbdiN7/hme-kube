@@ -1,0 +1,122 @@
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: hme
+  name: hme-db-svc
+  labels:
+    app: hme-db
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: hme-db
+    tier: mysql
+  type: LoadBalancer
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  namespace: hme
+  name: mysql-pv-claim
+  labels:
+    app: hme-db
+spec:
+  storageClassName: rook-ceph-block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: hme
+  name: hme-db-mysql
+  labels:
+    app: hme-db
+    tier: mysql
+spec:
+  selector:
+    matchLabels:
+      app: hme-db
+      tier: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: hme-db
+        tier: mysql
+    spec:
+      containers:
+        - image: mysql
+          name: mysql
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hme-db-secret
+                  key: dbpass
+            - name: MYSQL_DATABASE
+              value: bookstack
+            - name: MYSQL_USER
+              value: hme-user
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hme-db-secret
+                  key: dbroot
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-pv-claim
+# ---
+# apiVersion: traefik.io/v1alpha1
+# kind: IngressRoute
+# metadata:
+#   name: mysql
+#   namespace: hme
+# spec:
+#   entryPoints:
+#     - websecure
+#   routes:
+#   - match: Host(`mysql-1.yawmzero.io`)
+#     kind: Rule
+#     services:
+#     - name: hme-db-svc
+#       port: 3306
+# ---
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   annotations:
+#   labels:
+#     app: doc
+#   name: doc
+#   namespace: hme
+# spec:
+#   ingressClassName: traefik
+#   rules:
+#     - host: mysql1.yawmzero.io
+#       http:
+#         paths:
+#           - backend:
+#               service:
+#                 name: doc
+#                 port:
+#                   number: 3306
+#             path: /
+#             pathType: ImplementationSpecific
+#   tls:
+#     - hosts:
+#         - mysql1.yawmzero.io
+#       secretName: tls-traefik
+# status:
+#   loadBalancer: {}

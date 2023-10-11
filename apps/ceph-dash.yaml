@@ -1,0 +1,17 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: ceph
+  namespace: rook-ceph
+spec:
+  entryPoints:
+    - websecure
+  routes:
+  - match: Host(`ceph.yawmzero.io`)
+    kind: Rule
+    services:
+    - name: rook-ceph-mgr-dashboard
+      port: 7000
+
+
+

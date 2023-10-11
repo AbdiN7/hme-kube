@@ -2,17 +2,17 @@ apiVersion: v1
 kind: Service
 metadata:
   namespace: hme
-  name: media
+  name: doc
   labels:
-    app: media
+    app: doc
 spec:
   ports:
-    - port: 8096
-      name: jellyfin
-    - port: 8111
-      name: shoko
+    - port: 8080
+      name: dillinger
+    - port: 80
+      name: bookstack
   selector:
-    app: media
+    app: doc
     tier: frontend
   type: ClusterIP
 ---
@@ -20,9 +20,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   namespace: hme
-  name: jf-pv-claim
+  name: dill-pv-claim
   labels:
-    app: media
+    app: doc
 spec:
   storageClassName: rook-ceph-block
   accessModes:
@@ -35,9 +35,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   namespace: hme
-  name: shoko-pv-claim
+  name: bookstack-pv-claim
   labels:
-    app: media
+    app: doc
 spec:
   storageClassName: rook-ceph-block
   accessModes:
@@ -49,27 +49,27 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: media
+  name: doc
   namespace: hme
   labels:
-    app: media
+    app: doc
     tier: frontend
 spec:
   selector:
     matchLabels:
-      app: media
+      app: doc
       tier: frontend
-  strategy:
-    type: Recreate
+  # strategy:
+  #   type: Recreate
   template:
     metadata:
       labels:
-        app: media
+        app: doc
         tier: frontend
     spec:
       containers:
-        - image: lscr.io/linuxserver/jellyfin
-          name: jellyfin
+        - image: lscr.io/linuxserver/dillinger
+          name: dillinger
           env:
             - name: PUID
               value: "1000"
@@ -78,13 +78,13 @@ spec:
             - name: TZ
               value: America/Chicago
           ports:
-            - containerPort: 8096
-              name: jellyfin
+            - containerPort: 8080
+              name: dillinger
           volumeMounts:
-            - name: jellyfin-persistent-storage
+            - name: dillinger-persistent-storage
               mountPath: /config
-        - image: shokoanime/server
-          name: shoko
+        - image: linuxserver/bookstack
+          name: bookstack
           env:
             - name: PUID
               value: "1000"
@@ -92,86 +92,92 @@ spec:
               value: "1000"
             - name: TZ
               value: America/Chicago
+            - name: APP_URL
+              value: http://bookstack.yawmzero.io
+            - name: DB_USER
+              value: hme-db
+            - name: DB_DATABASE
+              value: bookstack
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_HOST
+              value: postgres1.yawmzero.io
+            - name: DB_PASS
+              value: WmF74ABXvE
+              # valueFrom:
+              #   secretKeyRef:
+              #     name: postgresql
+              #     key: password
           ports:
-            - containerPort: 8111
-              name: shoko
+            - containerPort: 80
+              name: bookstack
           volumeMounts:
-            - name: shoko-persistent-storage
-              mountPath: /home/shoko/.shoko
+            - name: bookstack-persistent-storage
+              mountPath: /config
       volumes:
-        - name: shoko-persistent-storage
+        - name: bookstack-persistent-storage
           persistentVolumeClaim:
-            claimName: shoko-pv-claim
-        - name: jellyfin-persistent-storage
+            claimName: bookstack-pv-claim
+        - name: dillinger-persistent-storage
           persistentVolumeClaim:
-            claimName: jf-pv-claim
+            claimName: dill-pv-claim
 
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: media
+  name: doc
   namespace: hme
 spec:
   entryPoints:
     - websecure
   routes:
-  - match: Host(`jellyfin.yawmzero.io`)
+  - match: Host(`dillinger.yawmzero.io`)
     kind: Rule
     services:
-    - name: media
-      port: 8096
-  - match: Host(`shoko.yawmzero.io`)
+    - name: doc
+      port: 8080
+  - match: Host(`bookstack.yawmzero.io`)
     kind: Rule
     services:
-    - name: media
-      port: 8111
-  # - match: Host(`sonarr.yawmzero.io`)
-  #   kind: Rule
-  #   services:
-  #   - name: media
-  #     port: 8999
-  # - match: Host(`radarr.yawmzero.io`)
-  #   kind: Rule
-  #   services:
-  #   - name: media
-  #     port: 8998
+    - name: doc
+      port: 80
 # ---
 # apiVersion: networking.k8s.io/v1
 # kind: Ingress
 # metadata:
 #   annotations:
 #   labels:
-#     app: media
-#   name: media
+#     app: doc
+#   name: doc
 #   namespace: hme
 # spec:
 #   ingressClassName: traefik
 #   rules:
-#     - host: jellyfin.yawmzero.io
+#     - host: dillinger.yawmzero.io
 #       http:
 #         paths:
 #           - backend:
 #               service:
-#                 name: media
+#                 name: doc
 #                 port:
-#                   number: 8096
+#                   number: 8080
 #             path: /
 #             pathType: ImplementationSpecific
-#     - host: shoko.yawmzero.io
+#     - host: bookstack.yawmzero.io
 #       http:
 #         paths:
 #           - backend:
 #               service:
-#                 name: media
+#                 name: doc
 #                 port:
-#                   number: 8111
+#                   number: 80
 #             path: /
 #             pathType: ImplementationSpecific
 #   tls:
 #     - hosts:
-#         - jellyfin.yawmzero.io
-#         - shoko.yawmzero.io
+#         - dillinger.yawmzero.io
+#         - bookstack.yawmzero.io
 #       secretName: tls-traefik
 # status:
 #   loadBalancer: {}
